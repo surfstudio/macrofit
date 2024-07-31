@@ -1,6 +1,6 @@
 ## ~~Retro~~Macrofit for Dart
 
-retrofit.dart is a type conversion dio client generator based on macro feature and inspired by [retrofit.dart](https://pub.dev/packages/retrofit).
+macrofit is a type conversion dio client generator based on macro feature and inspired by [retrofit.dart](https://pub.dev/packages/retrofit).
 
 <img height="400" src="doc/image.png"/>
 
