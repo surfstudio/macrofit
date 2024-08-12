@@ -1,11 +1,13 @@
 /// Annotation for Query parameter. 
 class Query {
-  const Query();
+  final String? as;
+  const Query({this.as});
 }
 
 /// Annotation for Body parameter.
 class Body {
-  const Body();
+  final String? as;
+  const Body({this.as});
 }
 
 /// Annotation for Header parameter.
@@ -19,5 +21,6 @@ class Header {
 /// Annotation for Part parameter.
 /// Used for multipart requests.
 class Part {
-  const Part();
+  final String? as;
+  const Part({this.as});
 }

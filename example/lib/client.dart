@@ -1,5 +1,6 @@
 import 'package:example/entities/post_entity.dart';
 import 'package:macrofit/macrofit.dart';
+import 'package:dio/dio.dart';
 
 @RestClient()
 class Client {
@@ -27,5 +28,5 @@ class Client {
   external Future<void> deletePost(int id);
 
   @GET('/posts')
-  external Future<List<PostEntity>> getPostsByUserId(@Query() int userId);
+  external Future<List<PostEntity>> getPostsByUserId(@Query(as: 'user_id') int userId);
 }
