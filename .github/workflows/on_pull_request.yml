@@ -1,0 +1,35 @@
+name: On pull request
+
+on:
+  pull_request:
+
+jobs:
+  get_flutter_version:
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/get_flutter_version.yml@main
+
+  analysis:
+    needs: get_flutter_version
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/analysis.yml@main
+    with:
+      FLUTTER_VERSION: ${{ needs.get_flutter_version.outputs.FLUTTER_VERSION }}
+
+  testing:
+    needs: [analysis, get_flutter_version]
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/testing.yml@main
+    with:
+      FLUTTER_VERSION: ${{ needs.get_flutter_version.outputs.FLUTTER_VERSION }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  build_android_example:
+    needs: [analysis, get_flutter_version]
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/build_android_example.yml@main
+    with:
+      FLUTTER_VERSION: ${{ needs.get_flutter_version.outputs.FLUTTER_VERSION }}
+      JAVA_VERSION: 17
+
+  build_ios_example:
+    needs: [analysis, get_flutter_version]
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/build_ios_example.yml@main
+    with:
+      FLUTTER_VERSION: ${{ needs.get_flutter_version.outputs.FLUTTER_VERSION }}

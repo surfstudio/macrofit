@@ -1,0 +1,35 @@
+name: Publishing
+
+on:
+  push:
+    tags:
+      - v*
+
+jobs:
+  get_flutter_version:
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/get_flutter_version.yml@main
+
+  analysis:
+    needs: get_flutter_version
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/analysis.yml@main
+    with:
+      FLUTTER_VERSION: ${{ needs.get_flutter_version.outputs.FLUTTER_VERSION }}
+
+  testing:
+    needs: [analysis, get_flutter_version]
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/testing.yml@main
+    with:
+      FLUTTER_VERSION: ${{ needs.get_flutter_version.outputs.FLUTTER_VERSION }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  package-publishing:
+    needs: [analysis, testing, get_flutter_version]
+    uses: surfstudio/flutter-ci-workflows/.github/workflows/publish_to_pub.yml@main
+    with:
+      FLUTTER_VERSION: ${{ needs.get_flutter_version.outputs.FLUTTER_VERSION }}
+      PANA_TOTAL: "100"
+    secrets:
+      PUB_CREDENTIAL_JSON: ${{ secrets.SURF_PUB_CREDENTIAL_JSON }}
+      PUB_OAUTH_ACCESS_TOKEN: ${{ secrets.SURF_PUB_OAUTH_ACCESS_TOKEN }}
+      PUB_OAUTH_REFRESH_TOKEN: ${{ secrets.SURF_PUB_OAUTH_REFRESH_TOKEN }}

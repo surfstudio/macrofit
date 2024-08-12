@@ -1,6 +1,6 @@
 name: macrofit
 description: "A macro version of retrofit.dart"
-version: 0.0.1
+version: 0.0.1-alpha
 homepage:
 
 environment:
