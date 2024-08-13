@@ -1,7 +1,7 @@
 name: macrofit
 description: "A macro version of retrofit.dart"
 version: 0.0.1-alpha
-homepage:
+homepage: https://github.com/surfstudio/macrofit
 
 environment:
   sdk: ^3.5.0-180
