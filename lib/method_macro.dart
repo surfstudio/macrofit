@@ -139,15 +139,21 @@ FutureOr<void> _buildMethod(String methodType, String path, MethodDeclaration me
 
   var responseType = _ResponseType.single;
 
-  // /// Resolve types from dart:core and dio packages.
-  // final stringType = 'String';
-  // final dynamicType = 'dynamic';
-  // final mapType = 'Map';
-  // final optionsType = 'Options';
-  // final listType = 'List';
+  /// Resolve types from dart:core and dio packages.
+  const stringTypeName = 'String';
+  const dynamicTypeName = 'dynamic';
+  const mapTypeName = 'Map';
+  const optionsTypeName = 'Options';
+  const listTypeName = 'List';
+
+  final stringType = await builder.resolveIdentifier(Uri.parse('dart:core'), stringTypeName);
+  final dynamicType = await builder.resolveIdentifier(Uri.parse('dart:core'), dynamicTypeName);
+  final mapType = await builder.resolveIdentifier(Uri.parse('dart:core'), mapTypeName);
+  final optionsType = await builder.resolveIdentifier(Uri.parse('package:dio/src/options.dart'), optionsTypeName);
+  final listType = await builder.resolveIdentifier(Uri.parse('dart:core'), listTypeName);
 
   /// Shortcut for `<String, dynamic>`.
-  // final stringDynamicMapType = ['<', stringType, ', ', dynamicType ,'>'];
+  final stringDynamicMapType = ['<', stringType, ', ', dynamicType, '>'];
 
   /// Try to get type of response.
   if (type is NamedTypeAnnotation) {
@@ -181,8 +187,13 @@ FutureOr<void> _buildMethod(String methodType, String path, MethodDeclaration me
   /// - if this a list, then List<dynamic>;
   /// - if this a void, then void.
   final fetchResolvedType = {
-    _ResponseType.single: ['Map<String, dynamic>'],
-    _ResponseType.list: ['List<dynamic>'],
+    _ResponseType.single: [mapType, ...stringDynamicMapType],
+    _ResponseType.list: [
+      listType,
+      '<',
+      dynamicType,
+      '>',
+    ],
     _ResponseType.empty: [voidSignature],
   };
 
@@ -192,15 +203,19 @@ FutureOr<void> _buildMethod(String methodType, String path, MethodDeclaration me
   /// Code of method body.
   final parts = <Object>[
     'async {\n',
-    '\t\tconst _extra = <String, dynamic>{};\n',
-    ..._buildQueryParams(fields),
-    ..._buildHeader(fields),
-    ...(await _buildBody(fields, builder)),
+    '\t\tconst _extra = ',
+    ...stringDynamicMapType,
+    '{};\n',
+    ..._buildQueryParams(fields, stringDynamicMapType),
+    ..._buildHeader(fields, stringDynamicMapType),
+    ...(await _buildBody(fields, stringDynamicMapType, builder)),
     '\t\t',
     responseType != _ResponseType.empty ? 'final _result  = ' : '',
     'await $dioVarSignature.fetch<',
     ...fetchResolvedType[responseType]!,
-    '>(Options(\n',
+    '>(',
+    optionsType,
+    '(\n',
     "\t\t  method: '$methodType',\n",
     '\t\t  headers: $headerVarSignature,\n',
     '\t\t  extra: _extra,\n',
@@ -219,7 +234,9 @@ FutureOr<void> _buildMethod(String methodType, String path, MethodDeclaration me
       ...(switch (responseType) {
         _ResponseType.single => ['\t\tfinal value = ', valueType.code, '.fromJson(_result.data!);\n'],
         _ResponseType.list => [
-            '\t\tfinal value = (_result.data! as List).map((e) => ',
+            '\t\tfinal value = (_result.data! as ',
+            listType,
+            ').map((e) => ',
             valueType.code,
             '.fromJson(e)).toList();\n'
           ],
@@ -256,40 +273,8 @@ extension AnnotationCheck on MetadataAnnotation {
   }
 }
 
-extension AnnotationListCheck on Iterable<MetadataAnnotation> {
-  ConstructorMetadataAnnotation? getAnnotationOf(String classname) {
-    return firstWhereOrNull((e) => e.hasAnnotationOf(classname)) as ConstructorMetadataAnnotation?;
-  }
-}
-
-List<Object> _getPairOfParams(FormalParameterDeclaration field, String classSignature, String nameParam) {
-  final type = field.type;
-  var result = <Object>["\t\t\t'${field.name}': ${field.name},\n"];
-
-  if (type is! NamedTypeAnnotation) {
-    return result;
-  }
-
-  final metadata = field.metadata.getAnnotationOf(classSignature);
-
-  if (metadata == null) {
-    return result;
-  }
-
-  final asValue = metadata.namedArguments[nameParam];
-
-  if (asValue == null) {
-    return result;
-  }
-
-  return [
-    "\t\t\t",
-    asValue,
-    ": ${field.name},\n",
-  ];
-}
-
-Future<List<Object>> _buildBody(List<FormalParameterDeclaration> fields, FunctionDefinitionBuilder builder) async {
+Future<List<Object>> _buildBody(List<FormalParameterDeclaration> fields, List<Object> stringDynamicMapType,
+    FunctionDefinitionBuilder builder) async {
   final bodyCreationCode = <Object>[];
 
   /// Get all parameters with @Body annotation.
@@ -305,7 +290,9 @@ Future<List<Object>> _buildBody(List<FormalParameterDeclaration> fields, Functio
   if (bodyParams.isNotEmpty && partParams.isEmpty) {
     /// final _data = <String, dynamic>{};
     bodyCreationCode.addAll([
-      '\t\tfinal $bodyVarSignature = <String, dynamic>{};\n',
+      '\t\tfinal $bodyVarSignature = ',
+      ...stringDynamicMapType,
+      '{};\n',
     ]);
 
     /// Collect all primitive parameters and add them to the map.
@@ -323,7 +310,20 @@ Future<List<Object>> _buildBody(List<FormalParameterDeclaration> fields, Functio
       /// });
       bodyCreationCode.addAll([
         '\t\t$bodyVarSignature.addAll({\n',
-        ...primitiveParams.map((f) => _getPairOfParams(f, bodySignature, 'as')).expand((e) => e),
+        ...primitiveParams.map((e) {
+          /// Search for @Body annotation.
+          final meta = e.metadata.firstWhereOrNull((e) => e.hasAnnotationOf(bodySignature));
+
+          /// Query annotation has a single named argument - as.
+          Object entryName = '\'${e.name}\'';
+
+          if (meta is ConstructorMetadataAnnotation) {
+            final as = meta.namedArguments['as'];
+            if (as != null) entryName = as;
+          }
+
+          return ['\t\t\t ', entryName, ": ${e.name},\n"];
+        }).expand((e) => e),
         '\t\t});\n',
       ]);
     }
@@ -372,22 +372,34 @@ Future<List<Object>> _buildBody(List<FormalParameterDeclaration> fields, Functio
               }
             : _PartParamType.notString;
 
+        final meta = part.metadata.firstWhereOrNull((e) => e.hasAnnotationOf(partSignature));
+
+        /// Part annotation has a single named argument - as.
+        Object entryName = '\'${part.name}\'';
+
+        if (meta is ConstructorMetadataAnnotation) {
+          final as = meta.namedArguments['as'];
+          if (as != null) entryName = as;
+        }
+
         switch (partParamType) {
           case _PartParamType.string:
             return [
               '\t\t$bodyVarSignature.fields.add(',
               mapEntryType,
-              '(\n',
-              "\t\t\t'${part.name}',\n",
-              '\t\t\t${part.name},\n',
-              '\t\t));\n',
+              '(',
+              entryName,
+              ', ${part.name}',
+              '));\n',
             ];
           case _PartParamType.file:
             return <Object>[
               '\t\t$bodyVarSignature.files.add(',
               mapEntryType,
               '(\n',
-              "\t\t\t'${part.name}',\n",
+              "\t\t\t",
+              entryName,
+              ",\n",
               '\t\t\t',
               multipartFileType,
               '.fromFileSync(${part.name}.path, filename: ${part.name}.path.split(',
@@ -399,9 +411,11 @@ Future<List<Object>> _buildBody(List<FormalParameterDeclaration> fields, Functio
             return [
               '\t\t$bodyVarSignature.fields.add(',
               mapEntryType,
-              '(',
-              "\t\t\t'${part.name}',",
-              '\t\t\t${part.name}.toString(),',
+              '(\n',
+              "\t\t\t",
+              entryName,
+              ",\n",
+              '\t\t\t${part.name}.toString(),\n',
               '\t\t));\n',
             ];
         }
@@ -412,14 +426,16 @@ Future<List<Object>> _buildBody(List<FormalParameterDeclaration> fields, Functio
     /// final _data = <String, dynamic>{};
 
     bodyCreationCode.addAll([
-      '\t\tfinal $bodyVarSignature = <String, dynamic>{};\n',
+      '\t\tfinal $bodyVarSignature = ',
+      ...stringDynamicMapType,
+      '{};\n',
     ]);
   }
 
   return bodyCreationCode;
 }
 
-List<Object> _buildQueryParams(List<FormalParameterDeclaration> fields) {
+List<Object> _buildQueryParams(List<FormalParameterDeclaration> fields, List<Object> stringDynamicMapType) {
   final queryParamsCreationCode = <Object>[];
 
   /// Get all parameters with @Query annotation.
@@ -433,8 +449,23 @@ List<Object> _buildQueryParams(List<FormalParameterDeclaration> fields) {
     /// };
 
     queryParamsCreationCode.addAll([
-      '\t\tfinal $queryVarSignature = <String, dynamic>{\n',
-      ...queryParams.map((f) => _getPairOfParams(f, querySignature, 'as')).expand((e) => e),
+      '\t\tfinal $queryVarSignature = ',
+      ...stringDynamicMapType,
+      '{\n',
+      ...queryParams.map((e) {
+        /// Search for @Query annotation.
+        final meta = e.metadata.firstWhereOrNull((e) => e.hasAnnotationOf(querySignature));
+
+        /// Query annotation has a single named argument - as.
+        Object entryName = '\'${e.name}\'';
+
+        if (meta is ConstructorMetadataAnnotation) {
+          final as = meta.namedArguments['as'];
+          if (as != null) entryName = as;
+        }
+
+        return ['\t\t\t ', entryName, ": ${e.name},\n"];
+      }).expand((e) => e),
       '\t\t};\n',
     ]);
   } else {
@@ -442,14 +473,16 @@ List<Object> _buildQueryParams(List<FormalParameterDeclaration> fields) {
     /// final queryParameters = <String, dynamic>{};
 
     queryParamsCreationCode.addAll([
-      '\t\tfinal $queryVarSignature = <String, dynamic>{};\n',
+      '\t\tfinal $queryVarSignature = ',
+      ...stringDynamicMapType,
+      '{};\n',
     ]);
   }
 
   return queryParamsCreationCode;
 }
 
-List<Object> _buildHeader(List<FormalParameterDeclaration> fields) {
+List<Object> _buildHeader(List<FormalParameterDeclaration> fields, List<Object> stringDynamicMapType) {
   /// Get all parameters with @Header annotation.
   final headerParams = fields.where(_isHeader).toList();
 
@@ -463,7 +496,9 @@ List<Object> _buildHeader(List<FormalParameterDeclaration> fields) {
     /// };
 
     headerParamsCreationCode.addAll([
-      '\t\tfinal $headerVarSignature = <String, dynamic>{\n',
+      '\t\tfinal $headerVarSignature = ',
+      ...stringDynamicMapType,
+      '{\n',
       ...headerParams.map((e) {
         /// Search for @Header annotation.
         final meta =
@@ -485,7 +520,9 @@ List<Object> _buildHeader(List<FormalParameterDeclaration> fields) {
     /// final _headers = <String, dynamic>{};
 
     headerParamsCreationCode.addAll([
-      '\t\tfinal $headerVarSignature = <String, dynamic>{};\n',
+      '\t\tfinal $headerVarSignature = ',
+      ...stringDynamicMapType,
+      '{};\n',
     ]);
   }
 

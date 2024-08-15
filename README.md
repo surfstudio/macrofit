@@ -2,12 +2,11 @@
 
 macrofit is a type conversion dio client generator based on macro feature and inspired by [retrofit.dart](https://pub.dev/packages/retrofit).
 
-<img height="400" src="doc/image.png"/>
+<img height="400" src="https://sun9-23.userapi.com/impg/_fCljYEtJ8GMghSEXhBdy-ZregDQajhl299OKw/z79vV0XGjvE.jpg?size=950x1308&quality=96&sign=6c05ede2063b741f5f2b4fff8cc71d83&type=album"/>
 
 ### Setup
 
 Since macro is not stable yet, you need to enable it in your `analysis_options.yaml`:
-
 
 ```yaml
 include: package:flutter_lints/flutter.yaml
@@ -31,7 +30,6 @@ Create your client:
 ```dart
 @RestClient()
 class ClientExample {
-
     ClientExample(this._dio, [this.baseUrl]);
 }
 ```
@@ -47,15 +45,16 @@ class ClientExample {
 
   @MultiPart('some/path')
   external Future<void> someRequest(
-    @Part() String part1,
+    @Part() String id,
     @Part() File photo,
+    @Part(as: 'user_info') UserInfo userInfo,
   );
 
   @POST('/posts/{userId}')
   external Future<void> updateProfile(
     @Header('Test') String testHeader,
     @Body() String name,
-    @Body() String surname,
+    @Body(as: 'user_name') String username,
     String userId,
   );
 
@@ -65,9 +64,9 @@ class ClientExample {
   );
 
   @GET('/posts')
-  external Future<GenericResponse<List<double>>> getPosts(
+  external Future<List<double>> getPosts(
     @Query() int page,
-    @Query() int limit,
+    @Query(as: 'limit') int perPage,
   );
 }
 ```
@@ -87,7 +86,7 @@ You can use:
 
 ```dart
     @GET('/posts')
-    external Future<GenericResponse<List<double>>> getPosts(
+    external Future<List<double>> getPosts(
       @Query() int page,
       @Query() int limit,
     );
